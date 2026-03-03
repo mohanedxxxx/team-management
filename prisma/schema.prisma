@@ -1,0 +1,227 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  ADMIN
+  LEADER
+  MODERATOR
+  MEMBER
+}
+
+enum TaskStatus {
+  TODO
+  IN_PROGRESS
+  DONE
+}
+
+enum JoinRequestStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+model Team {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  inviteCode  String   @unique
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // العلاقات
+  members       TeamMember[]
+  joinRequests  JoinRequest[]
+  tasks         Task[]
+  globalTasks   GlobalTask[]
+  notes         Note[]
+  quizzes       Quiz[]
+
+  @@map("teams")
+}
+
+model TeamMember {
+  id        String   @id @default(cuid())
+  role      Role     @default(MEMBER)
+  joinedAt  DateTime @default(now())
+
+  // العلاقات
+  teamId    String
+  team      Team     @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([teamId, userId])
+  @@map("team_members")
+}
+
+model JoinRequest {
+  id          String             @id @default(cuid())
+  status      JoinRequestStatus  @default(PENDING)
+  message     String?
+  createdAt   DateTime           @default(now())
+  updatedAt   DateTime           @updatedAt
+  reviewedAt  DateTime?
+
+  // العلاقات
+  teamId      String
+  team        Team               @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  userId      String
+  user        User               @relation("JoinRequestUser", fields: [userId], references: [id], onDelete: Cascade)
+  reviewedById String?
+  reviewedBy  User?              @relation("JoinRequestReviewer", fields: [reviewedById], references: [id])
+
+  @@unique([teamId, userId])
+  @@map("join_requests")
+}
+
+model User {
+  id            String   @id @default(cuid())
+  email         String   @unique
+  name          String?
+  password      String
+  avatar        String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  // العلاقات
+  teamMemberships   TeamMember[]
+  joinRequests      JoinRequest[]      @relation("JoinRequestUser")
+  reviewedRequests  JoinRequest[]      @relation("JoinRequestReviewer")
+  createdTasks      Task[]             @relation("CreatedTasks")
+  assignedTasks     Task[]             @relation("AssignedTasks")
+  notes             Note[]
+  globalTasks       GlobalTask[]
+  quizSubmissions   QuizSubmission[]
+
+  @@map("users")
+}
+
+model Task {
+  id          String     @id @default(cuid())
+  title       String
+  description String?
+  status      TaskStatus @default(TODO)
+  priority    Int        @default(1)
+  dueDate     DateTime?
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+
+  // العلاقات
+  teamId      String
+  team        Team       @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  creatorId   String
+  creator     User       @relation("CreatedTasks", fields: [creatorId], references: [id])
+  assigneeId  String?
+  assignee    User?      @relation("AssignedTasks", fields: [assigneeId], references: [id])
+
+  @@map("tasks")
+}
+
+model GlobalTask {
+  id          String     @id @default(cuid())
+  title       String
+  description String?
+  status      TaskStatus @default(TODO)
+  priority    Int        @default(1)
+  dueDate     DateTime?
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+
+  // العلاقات
+  teamId      String
+  team        Team       @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  creatorId   String
+  creator     User       @relation(fields: [creatorId], references: [id])
+
+  @@map("global_tasks")
+}
+
+model Note {
+  id          String   @id @default(cuid())
+  title       String
+  content     String
+  subject     String
+  color       String   @default("#ffffff")
+  isPinned    Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // العلاقات
+  teamId      String
+  team        Team     @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  authorId    String
+  author      User     @relation(fields: [authorId], references: [id])
+
+  @@map("notes")
+}
+
+model Quiz {
+  id          String   @id @default(cuid())
+  title       String
+  description String?
+  timeLimit   Int?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // العلاقات
+  teamId      String
+  team        Team           @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  questions   Question[]
+  submissions QuizSubmission[]
+
+  @@map("quizzes")
+}
+
+model Question {
+  id            String   @id @default(cuid())
+  question      String
+  optionA       String
+  optionB       String
+  optionC       String
+  optionD       String
+  correctAnswer String
+  order         Int      @default(0)
+  createdAt     DateTime @default(now())
+
+  // العلاقات
+  quizId      String
+  quiz        Quiz     @relation(fields: [quizId], references: [id], onDelete: Cascade)
+
+  @@map("questions")
+}
+
+model QuizSubmission {
+  id          String   @id @default(cuid())
+  score       Int
+  totalPoints Int
+  answers     String
+  submittedAt DateTime @default(now())
+
+  // العلاقات
+  quizId      String
+  quiz        Quiz     @relation(fields: [quizId], references: [id], onDelete: Cascade)
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([quizId, userId])
+  @@map("quiz_submissions")
+}
+
+model Subject {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  color       String   @default("#6366f1")
+  createdAt   DateTime @default(now())
+
+  @@map("subjects")
+}
