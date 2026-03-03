@@ -99,18 +99,27 @@ export function QuizzesTab() {
   const [currentSubject, setCurrentSubject] = useState<Subject | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [viewMode, setViewMode] = useState<'subjects' | 'subject'>('subjects');
+  const [isMobile, setIsMobile] = useState(false);
 
   // Form state
   const [formTitle, setFormTitle] = useState('');
   const [formDescription, setFormDescription] = useState('');
   const [formTimeLimit, setFormTimeLimit] = useState('');
-  const [formSubjectId, setFormSubjectId] = useState<string>('');
+  const [formSubjectId, setFormSubjectId] = useState<string>('__none__');
   const [formQuestions, setFormQuestions] = useState('');
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [timeLeft, setTimeLeft] = useState<number | null>(null);
   const [result, setResult] = useState<{ score: number; totalPoints: number; answers: Record<string, string> } | null>(null);
 
   const canCreateQuiz = user?.currentTeam?.role === 'ADMIN' || user?.currentTeam?.role === 'LEADER';
+
+  // Detect mobile
+  useEffect(() => {
+    const checkMobile = () => setIsMobile(window.innerWidth < 640);
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
 
   const fetchData = useCallback(async () => {
     try {
@@ -158,20 +167,43 @@ export function QuizzesTab() {
   }, [timeLeft]);
 
   const parseQuestions = (text: string) => {
-    const lines = text.trim().split('\n').filter(line => line.trim());
+    // Split all by | and trim
+    const allParts = text.split('|').map(p => p.trim()).filter(p => p);
+    
+    // Each question needs exactly 6 parts
+    if (allParts.length === 0 || allParts.length % 6 !== 0) {
+      return null;
+    }
+
     const questions: { question: string; optionA: string; optionB: string; optionC: string; optionD: string; correctAnswer: string }[] = [];
-
-    for (const line of lines) {
-      const parts = line.split('|').map(p => p.trim());
-      if (parts.length !== 6) {
-        return null;
-      }
-
-      const [question, optionA, optionB, optionC, optionD, correctAnswer] = parts;
-      const answer = correctAnswer.toUpperCase();
+    
+    for (let i = 0; i < allParts.length; i += 6) {
+      const question = allParts[i];
+      const optionA = allParts[i + 1];
+      const optionB = allParts[i + 2];
+      const optionC = allParts[i + 3];
+      const optionD = allParts[i + 4];
+      const answerPart = allParts[i + 5];
       
-      if (!['A', 'B', 'C', 'D'].includes(answer)) {
-        return null;
+      // First try to match with A, B, C, D directly
+      let correctAnswer = answerPart.toUpperCase();
+      
+      if (!['A', 'B', 'C', 'D'].includes(correctAnswer)) {
+        // If not A/B/C/D, try to match with the actual option text
+        const normalizedAnswer = answerPart.trim().toLowerCase();
+        
+        if (normalizedAnswer === optionA.trim().toLowerCase()) {
+          correctAnswer = 'A';
+        } else if (normalizedAnswer === optionB.trim().toLowerCase()) {
+          correctAnswer = 'B';
+        } else if (normalizedAnswer === optionC.trim().toLowerCase()) {
+          correctAnswer = 'C';
+        } else if (normalizedAnswer === optionD.trim().toLowerCase()) {
+          correctAnswer = 'D';
+        } else {
+          // Could not determine the correct answer
+          return null;
+        }
       }
 
       questions.push({
@@ -180,7 +212,7 @@ export function QuizzesTab() {
         optionB,
         optionC,
         optionD,
-        correctAnswer: answer,
+        correctAnswer,
       });
     }
 
@@ -208,7 +240,7 @@ export function QuizzesTab() {
           title: formTitle,
           description: formDescription,
           timeLimit: formTimeLimit ? parseInt(formTimeLimit) : null,
-          subjectId: formSubjectId || null,
+          subjectId: formSubjectId === '__none__' ? null : formSubjectId,
           questions: parsedQuestions,
         }),
       });
@@ -355,7 +387,7 @@ export function QuizzesTab() {
     setFormTitle('');
     setFormDescription('');
     setFormTimeLimit('');
-    setFormSubjectId('');
+    setFormSubjectId('__none__');
     setFormQuestions('');
   };
 
@@ -541,18 +573,19 @@ export function QuizzesTab() {
         </div>
         
         {canCreateQuiz && (
-          <div className="flex gap-2">
+          <>
             {/* Desktop Dialog */}
-            <Dialog open={createDialogOpen} onOpenChange={(open) => { 
-              setCreateDialogOpen(open); 
-              if (!open) resetForm(); 
-            }}>
-              <DialogTrigger asChild>
-                <Button className="hidden sm:flex bg-emerald-600 hover:bg-emerald-700">
-                  <Plus className="w-4 h-4 ml-2" />
-                  إنشاء اختبار
-                </Button>
-              </DialogTrigger>
+            {!isMobile && (
+              <Dialog open={createDialogOpen} onOpenChange={(open) => { 
+                setCreateDialogOpen(open); 
+                if (!open) resetForm(); 
+              }}>
+                <DialogTrigger asChild>
+                  <Button className="bg-emerald-600 hover:bg-emerald-700">
+                    <Plus className="w-4 h-4 ml-2" />
+                    إنشاء اختبار
+                  </Button>
+                </DialogTrigger>
               <DialogContent className="bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700 max-w-xl max-h-[90vh] overflow-y-auto">
                 <DialogHeader>
                   <DialogTitle className="text-slate-900 dark:text-white">إنشاء اختبار جديد</DialogTitle>
@@ -579,7 +612,7 @@ export function QuizzesTab() {
                           <SelectValue placeholder="بدون مادة" />
                         </SelectTrigger>
                         <SelectContent className="bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700">
-                          <SelectItem value="">بدون مادة</SelectItem>
+                          <SelectItem value="__none__">بدون مادة</SelectItem>
                           {subjects.map((s) => (
                             <SelectItem key={s.id} value={s.id}>
                               <div className="flex items-center gap-2">
@@ -608,12 +641,11 @@ export function QuizzesTab() {
                     <Textarea
                       value={formQuestions}
                       onChange={(e) => setFormQuestions(e.target.value)}
-                      placeholder={`السؤال الأول | الخيار أ | الخيار ب | الخيار ج | الخيار د | A
-السؤال الثاني | الخيار أ | الخيار ب | الخيار ج | الخيار د | B`}
+                      placeholder={`السؤال الأول | الخيار أ | الخيار ب | الخيار ج | الخيار د | A | السؤال الثاني | الخيار أ | الخيار ب | الخيار ج | الخيار د | B`}
                       className="bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white font-mono text-sm min-h-[180px]"
                     />
                     <p className="text-xs text-slate-500 dark:text-slate-400">
-                      كل سؤال في سطر • الصيغة: السؤال | أ | ب | ج | د | الإجابة (A/B/C/D)
+                      الصيغة: السؤال | أ | ب | ج | د | الإجابة (A/B/C/D أو نص الخيار الصحيح) - يمكن كتابة الأسئلة متتالية
                     </p>
                   </div>
                 </div>
@@ -628,19 +660,21 @@ export function QuizzesTab() {
                   </Button>
                 </DialogFooter>
               </DialogContent>
-            </Dialog>
+              </Dialog>
+            )}
 
             {/* Mobile Drawer */}
-            <Drawer open={createDialogOpen} onOpenChange={(open) => { 
-              setCreateDialogOpen(open); 
-              if (!open) resetForm(); 
-            }}>
-              <DrawerTrigger asChild>
-                <Button className="sm:hidden bg-emerald-600 hover:bg-emerald-700">
-                  <Plus className="w-4 h-4 ml-2" />
-                  إنشاء
-                </Button>
-              </DrawerTrigger>
+            {isMobile && (
+              <Drawer open={createDialogOpen} onOpenChange={(open) => { 
+                setCreateDialogOpen(open); 
+                if (!open) resetForm(); 
+              }}>
+                <DrawerTrigger asChild>
+                  <Button className="bg-emerald-600 hover:bg-emerald-700">
+                    <Plus className="w-4 h-4 ml-2" />
+                    إنشاء
+                  </Button>
+                </DrawerTrigger>
               <DrawerContent className="bg-white dark:bg-slate-900 border-t-slate-200 dark:border-t-slate-700">
                 <DrawerHeader>
                   <DrawerTitle className="text-slate-900 dark:text-white">إنشاء اختبار جديد</DrawerTitle>
@@ -668,7 +702,7 @@ export function QuizzesTab() {
                             <SelectValue placeholder="بدون مادة" />
                           </SelectTrigger>
                           <SelectContent className="bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700">
-                            <SelectItem value="">بدون مادة</SelectItem>
+                            <SelectItem value="__none__">بدون مادة</SelectItem>
                             {subjects.map((s) => (
                               <SelectItem key={s.id} value={s.id}>
                                 <div className="flex items-center gap-2">
@@ -714,8 +748,9 @@ export function QuizzesTab() {
                   </Button>
                 </DrawerFooter>
               </DrawerContent>
-            </Drawer>
-          </div>
+              </Drawer>
+            )}
+          </>
         )}
       </div>
 

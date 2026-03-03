@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useTheme } from '@/contexts/ThemeContext';
 import { Button } from '@/components/ui/button';
@@ -31,6 +31,14 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
+import {
+  Drawer,
+  DrawerContent,
+  DrawerDescription,
+  DrawerFooter,
+  DrawerHeader,
+  DrawerTitle,
+} from '@/components/ui/drawer';
 import { toast } from 'sonner';
 import {
   Users,
@@ -90,6 +98,7 @@ export function Dashboard() {
   const [activeTab, setActiveTab] = useState('global-tasks');
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [isMobile, setIsMobile] = useState(false);
   
   // Join team state
   const [joinCode, setJoinCode] = useState('');
@@ -100,6 +109,14 @@ export function Dashboard() {
   const [teamName, setTeamName] = useState('');
   const [teamDescription, setTeamDescription] = useState('');
   const [creating, setCreating] = useState(false);
+
+  // Detect mobile
+  useEffect(() => {
+    const checkMobile = () => setIsMobile(window.innerWidth < 640);
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
 
   const handleLogout = async () => {
     await logout();
@@ -417,51 +434,103 @@ export function Dashboard() {
       {/* Settings Dialog */}
       <SettingsDialog open={settingsOpen} onOpenChange={setSettingsOpen} />
       
-      {/* Create Team Dialog */}
-      <Dialog open={createTeamOpen} onOpenChange={setCreateTeamOpen}>
-        <DialogContent className="bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700 rounded-2xl">
-          <DialogHeader>
-            <DialogTitle className="text-slate-900 dark:text-white">إنشاء فريق جديد</DialogTitle>
-            <DialogDescription className="text-slate-500 dark:text-slate-400">
-              أدخل بيانات الفريق الجديد
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4">
-            <div className="space-y-2">
-              <Label className="text-slate-700 dark:text-slate-300">اسم الفريق</Label>
-              <Input
-                value={teamName}
-                onChange={(e) => setTeamName(e.target.value)}
-                placeholder="اسم الفريق"
-                className="bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white rounded-xl"
-              />
+      {/* Create Team Dialog - Desktop */}
+      {!isMobile && (
+        <Dialog open={createTeamOpen} onOpenChange={setCreateTeamOpen}>
+          <DialogContent className="bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700 rounded-2xl max-w-md">
+            <DialogHeader>
+              <DialogTitle className="text-slate-900 dark:text-white">إنشاء فريق جديد</DialogTitle>
+              <DialogDescription className="text-slate-500 dark:text-slate-400">
+                أدخل بيانات الفريق الجديد
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <Label className="text-slate-700 dark:text-slate-300">اسم الفريق</Label>
+                <Input
+                  value={teamName}
+                  onChange={(e) => setTeamName(e.target.value)}
+                  placeholder="اسم الفريق"
+                  className="bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white rounded-xl"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label className="text-slate-700 dark:text-slate-300">الوصف (اختياري)</Label>
+                <Input
+                  value={teamDescription}
+                  onChange={(e) => setTeamDescription(e.target.value)}
+                  placeholder="وصف الفريق"
+                  className="bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white rounded-xl"
+                />
+              </div>
             </div>
-            <div className="space-y-2">
-              <Label className="text-slate-700 dark:text-slate-300">الوصف (اختياري)</Label>
-              <Input
-                value={teamDescription}
-                onChange={(e) => setTeamDescription(e.target.value)}
-                placeholder="وصف الفريق"
-                className="bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white rounded-xl"
-              />
+            <DialogFooter>
+              <Button
+                className="bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white rounded-xl shadow-lg shadow-emerald-500/20"
+                onClick={handleCreateTeam}
+                disabled={creating}
+              >
+                {creating ? (
+                  <Loader2 className="w-4 h-4 animate-spin ml-2" />
+                ) : (
+                  <Plus className="w-4 h-4 ml-2" />
+                )}
+                إنشاء
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      )}
+
+      {/* Create Team Drawer - Mobile */}
+      {isMobile && (
+        <Drawer open={createTeamOpen} onOpenChange={setCreateTeamOpen}>
+          <DrawerContent className="bg-white dark:bg-slate-900 border-t-slate-200 dark:border-t-slate-700">
+            <DrawerHeader>
+              <DrawerTitle className="text-slate-900 dark:text-white">إنشاء فريق جديد</DrawerTitle>
+              <DrawerDescription className="text-slate-500 dark:text-slate-400">
+                أدخل بيانات الفريق الجديد
+              </DrawerDescription>
+            </DrawerHeader>
+            <div className="px-4 overflow-y-auto max-h-[60vh]">
+              <div className="space-y-4 py-4">
+                <div className="space-y-2">
+                  <Label className="text-slate-700 dark:text-slate-300">اسم الفريق</Label>
+                  <Input
+                    value={teamName}
+                    onChange={(e) => setTeamName(e.target.value)}
+                    placeholder="اسم الفريق"
+                    className="bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white rounded-xl"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-slate-700 dark:text-slate-300">الوصف (اختياري)</Label>
+                  <Input
+                    value={teamDescription}
+                    onChange={(e) => setTeamDescription(e.target.value)}
+                    placeholder="وصف الفريق"
+                    className="bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white rounded-xl"
+                  />
+                </div>
+              </div>
             </div>
-          </div>
-          <DialogFooter>
-            <Button
-              className="bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white rounded-xl shadow-lg shadow-emerald-500/20"
-              onClick={handleCreateTeam}
-              disabled={creating}
-            >
-              {creating ? (
-                <Loader2 className="w-4 h-4 animate-spin ml-2" />
-              ) : (
-                <Plus className="w-4 h-4 ml-2" />
-              )}
-              إنشاء
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+            <DrawerFooter>
+              <Button
+                className="bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white rounded-xl shadow-lg shadow-emerald-500/20"
+                onClick={handleCreateTeam}
+                disabled={creating}
+              >
+                {creating ? (
+                  <Loader2 className="w-4 h-4 animate-spin ml-2" />
+                ) : (
+                  <Plus className="w-4 h-4 ml-2" />
+                )}
+                إنشاء
+              </Button>
+            </DrawerFooter>
+          </DrawerContent>
+        </Drawer>
+      )}
     </div>
   );
 }

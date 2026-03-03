@@ -110,6 +110,7 @@ export function NotesTab() {
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [bookmarkedNotes, setBookmarkedNotes] = useState<Set<string>>(new Set());
+  const [isMobile, setIsMobile] = useState(false);
 
   // Form state - using separate state to avoid re-render issues
   const [formTitle, setFormTitle] = useState('');
@@ -158,6 +159,14 @@ export function NotesTab() {
     fetchNotes();
     fetchSubjects();
   }, [fetchNotes, fetchSubjects]);
+
+  // Detect mobile
+  useEffect(() => {
+    const checkMobile = () => setIsMobile(window.innerWidth < 640);
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
 
   // Get unique subjects from notes as fallback
   const notesSubjects = useMemo(() => {
@@ -495,16 +504,17 @@ export function NotesTab() {
           </Button>
           
           {/* Desktop Dialog */}
-          <Dialog open={dialogOpen} onOpenChange={(open) => { 
-            setDialogOpen(open); 
-            if (!open) resetForm(); 
-          }}>
-            <DialogTrigger asChild>
-              <Button className="hidden sm:flex bg-emerald-600 hover:bg-emerald-700">
-                <Plus className="w-4 h-4 ml-2" />
-                إضافة ملاحظة
-              </Button>
-            </DialogTrigger>
+          {!isMobile && (
+            <Dialog open={dialogOpen} onOpenChange={(open) => { 
+              setDialogOpen(open); 
+              if (!open) resetForm(); 
+            }}>
+              <DialogTrigger asChild>
+                <Button className="bg-emerald-600 hover:bg-emerald-700">
+                  <Plus className="w-4 h-4 ml-2" />
+                  إضافة ملاحظة
+                </Button>
+              </DialogTrigger>
             <DialogContent className="bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700 max-w-lg">
               <DialogHeader>
                 <DialogTitle className="text-slate-900 dark:text-white">
@@ -585,19 +595,21 @@ export function NotesTab() {
                 </Button>
               </DialogFooter>
             </DialogContent>
-          </Dialog>
+            </Dialog>
+          )}
 
           {/* Mobile Drawer */}
-          <Drawer open={dialogOpen} onOpenChange={(open) => { 
-            setDialogOpen(open); 
-            if (!open) resetForm(); 
-          }}>
-            <DrawerTrigger asChild>
-              <Button className="sm:hidden bg-emerald-600 hover:bg-emerald-700">
-                <Plus className="w-4 h-4 ml-2" />
-                إضافة
-              </Button>
-            </DrawerTrigger>
+          {isMobile && (
+            <Drawer open={dialogOpen} onOpenChange={(open) => { 
+              setDialogOpen(open); 
+              if (!open) resetForm(); 
+            }}>
+              <DrawerTrigger asChild>
+                <Button className="bg-emerald-600 hover:bg-emerald-700">
+                  <Plus className="w-4 h-4 ml-2" />
+                  إضافة
+                </Button>
+              </DrawerTrigger>
             <DrawerContent className="bg-white dark:bg-slate-900 border-t-slate-200 dark:border-t-slate-700">
               <DrawerHeader>
                 <DrawerTitle className="text-slate-900 dark:text-white">
@@ -677,7 +689,8 @@ export function NotesTab() {
                 </Button>
               </DrawerFooter>
             </DrawerContent>
-          </Drawer>
+            </Drawer>
+          )}
         </div>
       </div>
 
