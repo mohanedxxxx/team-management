@@ -53,7 +53,7 @@ import {
   MoreVertical,
 } from 'lucide-react';
 
-interface User {
+interface TeamUser {
   id: string;
   name: string | null;
   email: string;
@@ -101,13 +101,13 @@ const priorityColors: Record<number, string> = {
 export function PersonalTasksTab() {
   const { user } = useAuth();
   const [tasks, setTasks] = useState<Task[]>([]);
-  const [users, setUsers] = useState<User[]>([]);
+  const [users, setUsers] = useState<TeamUser[]>([]);
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingTask, setEditingTask] = useState<Task | null>(null);
   const [activeTab, setActiveTab] = useState('all');
 
-  // Form state
+  // Form state - separate to prevent re-render issues
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [assigneeId, setAssigneeId] = useState('');
@@ -150,8 +150,7 @@ export function PersonalTasksTab() {
     }
   }, []);
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSubmit = async () => {
     if (!title.trim()) {
       toast.error('العنوان مطلوب');
       return;
@@ -257,68 +256,6 @@ export function PersonalTasksTab() {
     );
   }
 
-  const FormContent = () => (
-    <form onSubmit={handleSubmit} className="space-y-4">
-      <div className="space-y-2">
-        <Label className="text-slate-300">العنوان</Label>
-        <Input
-          value={title}
-          onChange={(e) => setTitle(e.target.value)}
-          placeholder="عنوان المهمة"
-          className="bg-slate-700 border-slate-600 text-white"
-        />
-      </div>
-      <div className="space-y-2">
-        <Label className="text-slate-300">الوصف</Label>
-        <Textarea
-          value={description}
-          onChange={(e) => setDescription(e.target.value)}
-          placeholder="وصف المهمة (اختياري)"
-          className="bg-slate-700 border-slate-600 text-white"
-        />
-      </div>
-      <div className="space-y-2">
-        <Label className="text-slate-300">المسؤول عن المهمة</Label>
-        <Select value={assigneeId} onValueChange={setAssigneeId}>
-          <SelectTrigger className="bg-slate-700 border-slate-600 text-white">
-            <SelectValue placeholder="اختر عضو" />
-          </SelectTrigger>
-          <SelectContent className="bg-slate-700 border-slate-600">
-            {users.map((u) => (
-              <SelectItem key={u.id} value={u.id}>
-                {u.name} ({u.email})
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
-      <div className="grid grid-cols-2 gap-4">
-        <div className="space-y-2">
-          <Label className="text-slate-300">الأولوية</Label>
-          <Select value={priority} onValueChange={setPriority}>
-            <SelectTrigger className="bg-slate-700 border-slate-600 text-white">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent className="bg-slate-700 border-slate-600">
-              <SelectItem value="1">عادية</SelectItem>
-              <SelectItem value="2">متوسطة</SelectItem>
-              <SelectItem value="3">عالية</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-        <div className="space-y-2">
-          <Label className="text-slate-300">تاريخ الاستحقاق</Label>
-          <Input
-            type="date"
-            value={dueDate}
-            onChange={(e) => setDueDate(e.target.value)}
-            className="bg-slate-700 border-slate-600 text-white"
-          />
-        </div>
-      </div>
-    </form>
-  );
-
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
@@ -345,14 +282,73 @@ export function PersonalTasksTab() {
                     {editingTask ? 'قم بتعديل بيانات المهمة' : 'أدخل بيانات المهمة الجديدة'}
                   </DialogDescription>
                 </DialogHeader>
-                <FormContent />
+                <div className="space-y-4 py-4">
+                  <div className="space-y-2">
+                    <Label className="text-slate-300">العنوان</Label>
+                    <Input
+                      value={title}
+                      onChange={(e) => setTitle(e.target.value)}
+                      placeholder="عنوان المهمة"
+                      className="bg-slate-700 border-slate-600 text-white"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-slate-300">الوصف</Label>
+                    <Textarea
+                      value={description}
+                      onChange={(e) => setDescription(e.target.value)}
+                      placeholder="وصف المهمة (اختياري)"
+                      className="bg-slate-700 border-slate-600 text-white"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-slate-300">المسؤول عن المهمة</Label>
+                    <Select value={assigneeId} onValueChange={setAssigneeId}>
+                      <SelectTrigger className="bg-slate-700 border-slate-600 text-white">
+                        <SelectValue placeholder="اختر عضو" />
+                      </SelectTrigger>
+                      <SelectContent className="bg-slate-700 border-slate-600">
+                        {users.map((u) => (
+                          <SelectItem key={u.id} value={u.id}>
+                            {u.name} ({u.email})
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label className="text-slate-300">الأولوية</Label>
+                      <Select value={priority} onValueChange={setPriority}>
+                        <SelectTrigger className="bg-slate-700 border-slate-600 text-white">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent className="bg-slate-700 border-slate-600">
+                          <SelectItem value="1">عادية</SelectItem>
+                          <SelectItem value="2">متوسطة</SelectItem>
+                          <SelectItem value="3">عالية</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-2">
+                      <Label className="text-slate-300">تاريخ الاستحقاق</Label>
+                      <Input
+                        type="date"
+                        value={dueDate}
+                        onChange={(e) => setDueDate(e.target.value)}
+                        className="bg-slate-700 border-slate-600 text-white"
+                      />
+                    </div>
+                  </div>
+                </div>
                 <DialogFooter>
                   <Button
                     onClick={handleSubmit}
                     className="bg-emerald-600 hover:bg-emerald-700"
                     disabled={submitting}
                   >
-                    {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : 'حفظ'}
+                    {submitting ? <Loader2 className="w-4 h-4 animate-spin ml-2" /> : null}
+                    حفظ
                   </Button>
                 </DialogFooter>
               </DialogContent>
@@ -376,7 +372,65 @@ export function PersonalTasksTab() {
                   </DrawerDescription>
                 </DrawerHeader>
                 <div className="px-4 overflow-y-auto max-h-[60vh]">
-                  <FormContent />
+                  <div className="space-y-4 py-4">
+                    <div className="space-y-2">
+                      <Label className="text-slate-300">العنوان</Label>
+                      <Input
+                        value={title}
+                        onChange={(e) => setTitle(e.target.value)}
+                        placeholder="عنوان المهمة"
+                        className="bg-slate-700 border-slate-600 text-white"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label className="text-slate-300">الوصف</Label>
+                      <Textarea
+                        value={description}
+                        onChange={(e) => setDescription(e.target.value)}
+                        placeholder="وصف المهمة (اختياري)"
+                        className="bg-slate-700 border-slate-600 text-white"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label className="text-slate-300">المسؤول عن المهمة</Label>
+                      <Select value={assigneeId} onValueChange={setAssigneeId}>
+                        <SelectTrigger className="bg-slate-700 border-slate-600 text-white">
+                          <SelectValue placeholder="اختر عضو" />
+                        </SelectTrigger>
+                        <SelectContent className="bg-slate-700 border-slate-600">
+                          {users.map((u) => (
+                            <SelectItem key={u.id} value={u.id}>
+                              {u.name} ({u.email})
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label className="text-slate-300">الأولوية</Label>
+                        <Select value={priority} onValueChange={setPriority}>
+                          <SelectTrigger className="bg-slate-700 border-slate-600 text-white">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent className="bg-slate-700 border-slate-600">
+                            <SelectItem value="1">عادية</SelectItem>
+                            <SelectItem value="2">متوسطة</SelectItem>
+                            <SelectItem value="3">عالية</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="space-y-2">
+                        <Label className="text-slate-300">تاريخ الاستحقاق</Label>
+                        <Input
+                          type="date"
+                          value={dueDate}
+                          onChange={(e) => setDueDate(e.target.value)}
+                          className="bg-slate-700 border-slate-600 text-white"
+                        />
+                      </div>
+                    </div>
+                  </div>
                 </div>
                 <DrawerFooter>
                   <Button
@@ -384,7 +438,8 @@ export function PersonalTasksTab() {
                     className="bg-emerald-600 hover:bg-emerald-700"
                     disabled={submitting}
                   >
-                    {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : 'حفظ'}
+                    {submitting ? <Loader2 className="w-4 h-4 animate-spin ml-2" /> : null}
+                    حفظ
                   </Button>
                 </DrawerFooter>
               </DrawerContent>

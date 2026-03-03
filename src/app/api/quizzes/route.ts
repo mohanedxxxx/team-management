@@ -50,6 +50,9 @@ export async function GET() {
     const quizzes = await prisma.quiz.findMany({
       where: { teamId: user.teamId },
       include: {
+        subject: {
+          select: { id: true, name: true, color: true },
+        },
         _count: {
           select: { questions: true, submissions: true },
         },
@@ -67,6 +70,8 @@ export async function GET() {
       description: quiz.description,
       timeLimit: quiz.timeLimit,
       isActive: quiz.isActive,
+      subjectId: quiz.subjectId,
+      subject: quiz.subject,
       questionCount: quiz._count.questions,
       submissionCount: quiz._count.submissions,
       mySubmission: quiz.submissions[0] || null,
@@ -93,10 +98,20 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'غير مصرح لك بإنشاء اختبارات' }, { status: 403 });
     }
 
-    const { title, description, timeLimit, questions } = await request.json();
+    const { title, description, timeLimit, subjectId, questions } = await request.json();
 
     if (!title || !questions || questions.length === 0) {
       return NextResponse.json({ error: 'العنوان والأسئلة مطلوبة' }, { status: 400 });
+    }
+
+    // Verify subject belongs to team if provided
+    if (subjectId) {
+      const subject = await prisma.subject.findUnique({
+        where: { id: subjectId },
+      });
+      if (!subject || subject.teamId !== user.teamId) {
+        return NextResponse.json({ error: 'المادة غير موجودة' }, { status: 400 });
+      }
     }
 
     const quiz = await prisma.quiz.create({
@@ -104,6 +119,7 @@ export async function POST(request: NextRequest) {
         title,
         description,
         timeLimit,
+        subjectId: subjectId || null,
         teamId: user.teamId,
         questions: {
           create: questions.map((q: { question: string; optionA: string; optionB: string; optionC: string; optionD: string; correctAnswer: string }, index: number) => ({
@@ -119,6 +135,7 @@ export async function POST(request: NextRequest) {
       },
       include: {
         questions: true,
+        subject: true,
       },
     });
 

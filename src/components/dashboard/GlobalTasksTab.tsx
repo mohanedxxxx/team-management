@@ -89,7 +89,7 @@ export function GlobalTasksTab() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingTask, setEditingTask] = useState<GlobalTask | null>(null);
 
-  // Form state
+  // Form state - separate to prevent re-render issues
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [priority, setPriority] = useState('1');
@@ -116,8 +116,7 @@ export function GlobalTasksTab() {
     fetchTasks();
   }, []);
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSubmit = async () => {
     if (!title.trim()) {
       toast.error('العنوان مطلوب');
       return;
@@ -125,13 +124,12 @@ export function GlobalTasksTab() {
 
     setSubmitting(true);
     try {
-      const url = editingTask ? '/api/global-tasks' : '/api/global-tasks';
       const method = editingTask ? 'PUT' : 'POST';
       const body = editingTask
         ? { id: editingTask.id, title, description, priority: parseInt(priority), dueDate: dueDate || null }
         : { title, description, priority: parseInt(priority), dueDate: dueDate || null };
 
-      const res = await fetch(url, {
+      const res = await fetch('/api/global-tasks', {
         method,
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
@@ -213,53 +211,6 @@ export function GlobalTasksTab() {
     );
   }
 
-  const FormContent = () => (
-    <form onSubmit={handleSubmit} className="space-y-4">
-      <div className="space-y-2">
-        <Label className="text-slate-300">العنوان</Label>
-        <Input
-          value={title}
-          onChange={(e) => setTitle(e.target.value)}
-          placeholder="عنوان المهمة"
-          className="bg-slate-700 border-slate-600 text-white"
-        />
-      </div>
-      <div className="space-y-2">
-        <Label className="text-slate-300">الوصف</Label>
-        <Textarea
-          value={description}
-          onChange={(e) => setDescription(e.target.value)}
-          placeholder="وصف المهمة (اختياري)"
-          className="bg-slate-700 border-slate-600 text-white"
-        />
-      </div>
-      <div className="grid grid-cols-2 gap-4">
-        <div className="space-y-2">
-          <Label className="text-slate-300">الأولوية</Label>
-          <Select value={priority} onValueChange={setPriority}>
-            <SelectTrigger className="bg-slate-700 border-slate-600 text-white">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent className="bg-slate-700 border-slate-600">
-              <SelectItem value="1">عادية</SelectItem>
-              <SelectItem value="2">متوسطة</SelectItem>
-              <SelectItem value="3">عالية</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-        <div className="space-y-2">
-          <Label className="text-slate-300">تاريخ الاستحقاق</Label>
-          <Input
-            type="date"
-            value={dueDate}
-            onChange={(e) => setDueDate(e.target.value)}
-            className="bg-slate-700 border-slate-600 text-white"
-          />
-        </div>
-      </div>
-    </form>
-  );
-
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
@@ -286,14 +237,58 @@ export function GlobalTasksTab() {
                     {editingTask ? 'قم بتعديل بيانات المهمة' : 'أدخل بيانات المهمة الجديدة'}
                   </DialogDescription>
                 </DialogHeader>
-                <FormContent />
+                <div className="space-y-4 py-4">
+                  <div className="space-y-2">
+                    <Label className="text-slate-300">العنوان</Label>
+                    <Input
+                      value={title}
+                      onChange={(e) => setTitle(e.target.value)}
+                      placeholder="عنوان المهمة"
+                      className="bg-slate-700 border-slate-600 text-white"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-slate-300">الوصف</Label>
+                    <Textarea
+                      value={description}
+                      onChange={(e) => setDescription(e.target.value)}
+                      placeholder="وصف المهمة (اختياري)"
+                      className="bg-slate-700 border-slate-600 text-white"
+                    />
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label className="text-slate-300">الأولوية</Label>
+                      <Select value={priority} onValueChange={setPriority}>
+                        <SelectTrigger className="bg-slate-700 border-slate-600 text-white">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent className="bg-slate-700 border-slate-600">
+                          <SelectItem value="1">عادية</SelectItem>
+                          <SelectItem value="2">متوسطة</SelectItem>
+                          <SelectItem value="3">عالية</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-2">
+                      <Label className="text-slate-300">تاريخ الاستحقاق</Label>
+                      <Input
+                        type="date"
+                        value={dueDate}
+                        onChange={(e) => setDueDate(e.target.value)}
+                        className="bg-slate-700 border-slate-600 text-white"
+                      />
+                    </div>
+                  </div>
+                </div>
                 <DialogFooter>
                   <Button
                     onClick={handleSubmit}
                     className="bg-emerald-600 hover:bg-emerald-700"
                     disabled={submitting}
                   >
-                    {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : 'حفظ'}
+                    {submitting ? <Loader2 className="w-4 h-4 animate-spin ml-2" /> : null}
+                    حفظ
                   </Button>
                 </DialogFooter>
               </DialogContent>
@@ -317,7 +312,50 @@ export function GlobalTasksTab() {
                   </DrawerDescription>
                 </DrawerHeader>
                 <div className="px-4 overflow-y-auto max-h-[60vh]">
-                  <FormContent />
+                  <div className="space-y-4 py-4">
+                    <div className="space-y-2">
+                      <Label className="text-slate-300">العنوان</Label>
+                      <Input
+                        value={title}
+                        onChange={(e) => setTitle(e.target.value)}
+                        placeholder="عنوان المهمة"
+                        className="bg-slate-700 border-slate-600 text-white"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label className="text-slate-300">الوصف</Label>
+                      <Textarea
+                        value={description}
+                        onChange={(e) => setDescription(e.target.value)}
+                        placeholder="وصف المهمة (اختياري)"
+                        className="bg-slate-700 border-slate-600 text-white"
+                      />
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label className="text-slate-300">الأولوية</Label>
+                        <Select value={priority} onValueChange={setPriority}>
+                          <SelectTrigger className="bg-slate-700 border-slate-600 text-white">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent className="bg-slate-700 border-slate-600">
+                            <SelectItem value="1">عادية</SelectItem>
+                            <SelectItem value="2">متوسطة</SelectItem>
+                            <SelectItem value="3">عالية</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="space-y-2">
+                        <Label className="text-slate-300">تاريخ الاستحقاق</Label>
+                        <Input
+                          type="date"
+                          value={dueDate}
+                          onChange={(e) => setDueDate(e.target.value)}
+                          className="bg-slate-700 border-slate-600 text-white"
+                        />
+                      </div>
+                    </div>
+                  </div>
                 </div>
                 <DrawerFooter>
                   <Button
@@ -325,7 +363,8 @@ export function GlobalTasksTab() {
                     className="bg-emerald-600 hover:bg-emerald-700"
                     disabled={submitting}
                   >
-                    {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : 'حفظ'}
+                    {submitting ? <Loader2 className="w-4 h-4 animate-spin ml-2" /> : null}
+                    حفظ
                   </Button>
                 </DrawerFooter>
               </DrawerContent>

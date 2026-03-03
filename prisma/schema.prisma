@@ -6,8 +6,8 @@ generator client {
 }
 
 datasource db {
-  provider = "sqlite"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
 }
 
 enum Role {
@@ -37,13 +37,13 @@ model Team {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  // العلاقات
   members       TeamMember[]
   joinRequests  JoinRequest[]
   tasks         Task[]
   globalTasks   GlobalTask[]
   notes         Note[]
   quizzes       Quiz[]
+  subjects      Subject[]
 
   @@map("teams")
 }
@@ -53,7 +53,6 @@ model TeamMember {
   role      Role     @default(MEMBER)
   joinedAt  DateTime @default(now())
 
-  // العلاقات
   teamId    String
   team      Team     @relation(fields: [teamId], references: [id], onDelete: Cascade)
   userId    String
@@ -71,7 +70,6 @@ model JoinRequest {
   updatedAt   DateTime           @updatedAt
   reviewedAt  DateTime?
 
-  // العلاقات
   teamId      String
   team        Team               @relation(fields: [teamId], references: [id], onDelete: Cascade)
   userId      String
@@ -92,7 +90,6 @@ model User {
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
-  // العلاقات
   teamMemberships   TeamMember[]
   joinRequests      JoinRequest[]      @relation("JoinRequestUser")
   reviewedRequests  JoinRequest[]      @relation("JoinRequestReviewer")
@@ -115,7 +112,6 @@ model Task {
   createdAt   DateTime   @default(now())
   updatedAt   DateTime   @updatedAt
 
-  // العلاقات
   teamId      String
   team        Team       @relation(fields: [teamId], references: [id], onDelete: Cascade)
   creatorId   String
@@ -136,7 +132,6 @@ model GlobalTask {
   createdAt   DateTime   @default(now())
   updatedAt   DateTime   @updatedAt
 
-  // العلاقات
   teamId      String
   team        Team       @relation(fields: [teamId], references: [id], onDelete: Cascade)
   creatorId   String
@@ -155,7 +150,6 @@ model Note {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  // العلاقات
   teamId      String
   team        Team     @relation(fields: [teamId], references: [id], onDelete: Cascade)
   authorId    String
@@ -173,9 +167,10 @@ model Quiz {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  // العلاقات
   teamId      String
   team        Team           @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  subjectId   String?
+  subject     Subject?       @relation(fields: [subjectId], references: [id], onDelete: SetNull)
   questions   Question[]
   submissions QuizSubmission[]
 
@@ -193,7 +188,6 @@ model Question {
   order         Int      @default(0)
   createdAt     DateTime @default(now())
 
-  // العلاقات
   quizId      String
   quiz        Quiz     @relation(fields: [quizId], references: [id], onDelete: Cascade)
 
@@ -207,7 +201,6 @@ model QuizSubmission {
   answers     String
   submittedAt DateTime @default(now())
 
-  // العلاقات
   quizId      String
   quiz        Quiz     @relation(fields: [quizId], references: [id], onDelete: Cascade)
   userId      String
@@ -219,9 +212,14 @@ model QuizSubmission {
 
 model Subject {
   id          String   @id @default(cuid())
-  name        String   @unique
+  name        String
   color       String   @default("#6366f1")
   createdAt   DateTime @default(now())
 
+  teamId      String
+  team        Team     @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  quizzes     Quiz[]
+
+  @@unique([teamId, name])
   @@map("subjects")
 }
