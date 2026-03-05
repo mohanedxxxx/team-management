@@ -55,6 +55,7 @@ export async function GET() {
       return NextResponse.json({ error: 'غير مصرح' }, { status: 401 });
     }
 
+    // Get tasks with user's personal status if available
     const tasks = await prisma.globalTask.findMany({
       where: { teamId: user.teamId },
       include: {
@@ -72,7 +73,7 @@ export async function GET() {
       id: task.id,
       title: task.title,
       description: task.description,
-      status: task.userStatuses[0]?.status || task.status, // Use user's status or default
+      status: task.userStatuses?.[0]?.status || task.status, // Use user's status or default
       defaultStatus: task.status, // Keep the default status for reference
       priority: task.priority,
       dueDate: task.dueDate,
@@ -83,7 +84,39 @@ export async function GET() {
     return NextResponse.json({ tasks: tasksWithUserStatus });
   } catch (error) {
     console.error('Get global tasks error:', error);
-    return NextResponse.json({ error: 'حدث خطأ في جلب المهام الكلية' }, { status: 500 });
+    
+    // Fallback: try to get tasks without userStatuses (in case table doesn't exist)
+    try {
+      const user = await getCurrentUser();
+      if (!user) {
+        return NextResponse.json({ error: 'غير مصرح' }, { status: 401 });
+      }
+
+      const tasks = await prisma.globalTask.findMany({
+        where: { teamId: user.teamId },
+        include: {
+          creator: { select: { id: true, name: true, email: true } },
+        },
+        orderBy: { createdAt: 'desc' },
+      });
+
+      const tasksResponse = tasks.map(task => ({
+        id: task.id,
+        title: task.title,
+        description: task.description,
+        status: task.status,
+        defaultStatus: task.status,
+        priority: task.priority,
+        dueDate: task.dueDate,
+        createdAt: task.createdAt,
+        creator: task.creator,
+      }));
+
+      return NextResponse.json({ tasks: tasksResponse });
+    } catch (fallbackError) {
+      console.error('Fallback error:', fallbackError);
+      return NextResponse.json({ error: 'حدث خطأ في جلب المهام الكلية' }, { status: 500 });
+    }
   }
 }
 
