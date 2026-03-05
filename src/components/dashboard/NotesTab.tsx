@@ -43,7 +43,6 @@ import {
   FileText,
   Loader2,
   Search,
-  FolderOpen,
   Settings,
   X,
   Volume2,
@@ -104,7 +103,6 @@ function getTextColor(bgColor: string): string {
   const color = colorOptions.find(c => c.value === bgColor);
   if (color) return color.textColor;
   
-  // Calculate contrast for custom colors
   const hex = bgColor.replace('#', '');
   const r = parseInt(hex.substr(0, 2), 16);
   const g = parseInt(hex.substr(2, 2), 16);
@@ -132,9 +130,6 @@ const scrollbarStyles = `
   .dark .custom-scrollbar::-webkit-scrollbar-thumb {
     background: #475569;
   }
-  .dark .custom-scrollbar::-webkit-scrollbar-thumb:hover {
-    background: #64748b;
-  }
 `;
 
 export function NotesTab() {
@@ -149,7 +144,6 @@ export function NotesTab() {
   const [selectedSubject, setSelectedSubject] = useState<string>('all');
   const [submitting, setSubmitting] = useState(false);
 
-  // Note Viewer State
   const [viewerOpen, setViewerOpen] = useState(false);
   const [viewingNote, setViewingNote] = useState<Note | null>(null);
   const [fontSize, setFontSize] = useState(18);
@@ -157,8 +151,6 @@ export function NotesTab() {
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [bookmarkedNotes, setBookmarkedNotes] = useState<Set<string>>(new Set());
-  
-  // Expanded subjects for folder view
   const [expandedSubjects, setExpandedSubjects] = useState<Set<string>>(new Set());
 
   const isMobile = useMemo(() => {
@@ -213,10 +205,12 @@ export function NotesTab() {
     fetchSubjects();
   }, [fetchNotes, fetchSubjects]);
 
+  // Get unique subjects from notes
   const notesSubjects = useMemo(() => {
     return [...new Set(notes.map((n) => n.subject))];
   }, [notes]);
 
+  // Combine DB subjects with notes subjects
   const allSubjects = useMemo(() => {
     const dbNames = subjects.map(s => s.name);
     const fromNotes = notesSubjects.filter(s => !dbNames.includes(s));
@@ -226,7 +220,27 @@ export function NotesTab() {
     ];
   }, [subjects, notesSubjects]);
 
-  // Group notes by subject
+  // Filter notes
+  const filteredNotes = useMemo(() => {
+    return notes.filter((note) => {
+      const matchesSearch =
+        note.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        note.content.toLowerCase().includes(searchQuery.toLowerCase());
+      const matchesSubject = selectedSubject === 'all' || note.subject === selectedSubject;
+      return matchesSearch && matchesSubject;
+    });
+  }, [notes, searchQuery, selectedSubject]);
+
+  // Sort notes: pinned first, then by date
+  const sortedNotes = useMemo(() => {
+    return [...filteredNotes].sort((a, b) => {
+      if (a.isPinned && !b.isPinned) return -1;
+      if (!a.isPinned && b.isPinned) return 1;
+      return new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime();
+    });
+  }, [filteredNotes]);
+
+  // Group notes by subject - using sortedNotes (defined after it)
   const notesBySubject = useMemo(() => {
     const grouped: Record<string, Note[]> = {};
     sortedNotes.forEach(note => {
@@ -236,7 +250,7 @@ export function NotesTab() {
       grouped[note.subject].push(note);
     });
     return grouped;
-  }, [notes, searchQuery]);
+  }, [sortedNotes]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -448,10 +462,8 @@ export function NotesTab() {
       const newSet = new Set(prev);
       if (newSet.has(noteId)) {
         newSet.delete(noteId);
-        toast.success('تم إزالة العلامة المرجعية');
       } else {
         newSet.add(noteId);
-        toast.success('تم إضافة العلامة المرجعية');
       }
       return newSet;
     });
@@ -506,24 +518,6 @@ export function NotesTab() {
     }
   };
 
-  const filteredNotes = useMemo(() => {
-    return notes.filter((note) => {
-      const matchesSearch =
-        note.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        note.content.toLowerCase().includes(searchQuery.toLowerCase());
-      const matchesSubject = selectedSubject === 'all' || note.subject === selectedSubject;
-      return matchesSearch && matchesSubject;
-    });
-  }, [notes, searchQuery, selectedSubject]);
-
-  const sortedNotes = useMemo(() => {
-    return [...filteredNotes].sort((a, b) => {
-      if (a.isPinned && !b.isPinned) return -1;
-      if (!a.isPinned && b.isPinned) return 1;
-      return new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime();
-    });
-  }, [filteredNotes]);
-
   const toggleSubjectExpand = (subjectName: string) => {
     setExpandedSubjects(prev => {
       const newSet = new Set(prev);
@@ -546,7 +540,6 @@ export function NotesTab() {
 
   return (
     <div className="space-y-6">
-      {/* Custom Scrollbar Styles */}
       <style>{scrollbarStyles}</style>
 
       {/* Header */}
@@ -786,13 +779,11 @@ export function NotesTab() {
                       }}
                       onClick={() => openNoteViewer(note)}
                     >
-                      {/* Pin indicator */}
                       {note.isPinned && (
                         <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-amber-400 to-amber-500" />
                       )}
                       
                       <div className="p-4">
-                        {/* Title with proper color */}
                         <h4 
                           className="font-semibold text-sm line-clamp-1 mb-2"
                           style={{ color: getTextColor(note.color) }}
@@ -801,7 +792,6 @@ export function NotesTab() {
                           {note.title}
                         </h4>
                         
-                        {/* Content preview with proper color */}
                         <p 
                           className="text-xs line-clamp-3 whitespace-pre-wrap mb-3 opacity-80"
                           style={{ color: getTextColor(note.color) }}
@@ -809,12 +799,10 @@ export function NotesTab() {
                           {note.content}
                         </p>
                         
-                        {/* Date */}
                         <p className="text-xs opacity-60" style={{ color: getTextColor(note.color) }}>
                           {new Date(note.updatedAt).toLocaleDateString('ar-EG')}
                         </p>
                         
-                        {/* Action buttons */}
                         {canManageNotes && (
                           <div className={`flex gap-1 mt-2 pt-2 border-t border-black/10 ${isMobile ? '' : 'opacity-0 group-hover:opacity-100'} transition-opacity`}>
                             <Button
