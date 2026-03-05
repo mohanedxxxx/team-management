@@ -267,8 +267,9 @@ function TaskCard({
           </div>
         </div>
 
-        {/* Status Change */}
+        {/* Status Change - Personal Status */}
         <div className="flex items-center gap-2 pt-2" onClick={(e) => e.stopPropagation()}>
+          <span className="text-xs text-slate-500 dark:text-slate-400">حالتك:</span>
           <Select value={task.status} onValueChange={onStatusChange}>
             <SelectTrigger className="h-9 text-xs bg-white/80 dark:bg-black/20 border-0 shadow-sm flex-1">
               <SelectValue />
@@ -430,9 +431,9 @@ function TaskDetailsDialog({
             </div>
           )}
 
-          {/* Status Change */}
+          {/* Status Change - Personal Status */}
           <div className="flex items-center gap-4">
-            <span className="text-sm text-slate-600 dark:text-slate-400">تغيير الحالة:</span>
+            <span className="text-sm text-slate-600 dark:text-slate-400">حالتك الشخصية:</span>
             <Select value={task.status} onValueChange={onStatusChange}>
               <SelectTrigger className="w-40 bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700">
                 <SelectValue />
@@ -776,13 +777,14 @@ export function GlobalTasksTab() {
 
   const handleStatusChange = useCallback(async (taskId: string, status: string) => {
     try {
-      const res = await fetch('/api/global-tasks', {
-        method: 'PUT',
+      // Update user's personal task status
+      const res = await fetch('/api/user-task-status', {
+        method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id: taskId, status }),
+        body: JSON.stringify({ taskId, status }),
       });
       if (res.ok) {
-        toast.success('تم تحديث الحالة');
+        toast.success('تم تحديث حالتك الشخصية');
         fetchTasks();
         if (selectedTask?.id === taskId) {
           setSelectedTask({ ...selectedTask, status: status as GlobalTask['status'] });

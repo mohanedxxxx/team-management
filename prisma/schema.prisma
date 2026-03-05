@@ -3,9 +3,8 @@ generator client {
 }
 
 datasource db {
-  provider  = "postgresql"
+  provider  = "sqlite"
   url       = env("DATABASE_URL")
-  directUrl = env("DIRECT_URL")
 }
 
 model Team {
@@ -75,6 +74,7 @@ model User {
   teamMemberships  TeamMember[]
   pushSubscriptions PushSubscription[]
   taskComments     TaskComment[]
+  userTaskStatuses UserTaskStatus[]
 
   @@map("users")
 }
@@ -102,7 +102,7 @@ model GlobalTask {
   id          String     @id @default(cuid())
   title       String
   description String?
-  status      TaskStatus @default(TODO)
+  status      TaskStatus @default(TODO) // Default status, can be overridden by user status
   priority    Int        @default(1)
   dueDate     DateTime?
   createdAt   DateTime   @default(now())
@@ -112,8 +112,23 @@ model GlobalTask {
   creator     User       @relation(fields: [creatorId], references: [id])
   team        Team       @relation(fields: [teamId], references: [id], onDelete: Cascade)
   comments    TaskComment[]
+  userStatuses UserTaskStatus[]
 
   @@map("global_tasks")
+}
+
+model UserTaskStatus {
+  id        String     @id @default(cuid())
+  status    TaskStatus @default(TODO)
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+  taskId    String
+  userId    String
+  task      GlobalTask @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([taskId, userId])
+  @@map("user_task_statuses")
 }
 
 model TaskComment {

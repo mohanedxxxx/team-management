@@ -46,7 +46,7 @@ async function getCurrentUser() {
   }
 }
 
-// الحصول على المهام الكلية
+// الحصول على المهام الكلية مع حالة المستخدم الشخصية
 export async function GET() {
   try {
     const user = await getCurrentUser();
@@ -59,11 +59,28 @@ export async function GET() {
       where: { teamId: user.teamId },
       include: {
         creator: { select: { id: true, name: true, email: true } },
+        userStatuses: {
+          where: { userId: user.id },
+          select: { status: true },
+        },
       },
       orderBy: { createdAt: 'desc' },
     });
 
-    return NextResponse.json({ tasks });
+    // Transform tasks to include user's personal status
+    const tasksWithUserStatus = tasks.map(task => ({
+      id: task.id,
+      title: task.title,
+      description: task.description,
+      status: task.userStatuses[0]?.status || task.status, // Use user's status or default
+      defaultStatus: task.status, // Keep the default status for reference
+      priority: task.priority,
+      dueDate: task.dueDate,
+      createdAt: task.createdAt,
+      creator: task.creator,
+    }));
+
+    return NextResponse.json({ tasks: tasksWithUserStatus });
   } catch (error) {
     console.error('Get global tasks error:', error);
     return NextResponse.json({ error: 'حدث خطأ في جلب المهام الكلية' }, { status: 500 });
@@ -130,7 +147,7 @@ export async function POST(request: NextRequest) {
   }
 }
 
-// تحديث المهمة الكلية
+// تحديث المهمة الكلية (فقط المحتوى من الأدمن/الليدر)
 export async function PUT(request: NextRequest) {
   try {
     const user = await getCurrentUser();
@@ -139,7 +156,7 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json({ error: 'غير مصرح' }, { status: 401 });
     }
 
-    const { id, title, description, status, priority, dueDate } = await request.json();
+    const { id, title, description, priority, dueDate } = await request.json();
 
     const task = await prisma.globalTask.findUnique({ where: { id } });
     if (!task || task.teamId !== user.teamId) {
@@ -151,7 +168,6 @@ export async function PUT(request: NextRequest) {
     const updateData: {
       title?: string;
       description?: string;
-      status?: TaskStatus;
       priority?: number;
       dueDate?: Date | null;
     } = {};
@@ -163,17 +179,32 @@ export async function PUT(request: NextRequest) {
       if (dueDate !== undefined) updateData.dueDate = dueDate ? new Date(dueDate) : null;
     }
 
-    if (status) updateData.status = status as TaskStatus;
-
     const updatedTask = await prisma.globalTask.update({
       where: { id },
       data: updateData,
       include: {
         creator: { select: { id: true, name: true, email: true } },
+        userStatuses: {
+          where: { userId: user.id },
+          select: { status: true },
+        },
       },
     });
 
-    return NextResponse.json({ task: updatedTask });
+    // Transform to include user's personal status
+    const responseTask = {
+      id: updatedTask.id,
+      title: updatedTask.title,
+      description: updatedTask.description,
+      status: updatedTask.userStatuses[0]?.status || updatedTask.status,
+      defaultStatus: updatedTask.status,
+      priority: updatedTask.priority,
+      dueDate: updatedTask.dueDate,
+      createdAt: updatedTask.createdAt,
+      creator: updatedTask.creator,
+    };
+
+    return NextResponse.json({ task: responseTask });
   } catch (error) {
     console.error('Update global task error:', error);
     return NextResponse.json({ error: 'حدث خطأ في تحديث المهمة الكلية' }, { status: 500 });
