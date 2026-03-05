@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
@@ -50,10 +50,10 @@ import {
   VolumeX,
   ZoomIn,
   ZoomOut,
-  BookOpen,
   AlignJustify,
   AlignCenter,
   AlignLeft,
+  AlignRight,
   Maximize2,
   Minimize2,
   ChevronLeft,
@@ -61,6 +61,8 @@ import {
   Printer,
   Share2,
   Bookmark,
+  ChevronDown,
+  ChevronUp,
 } from 'lucide-react';
 
 interface Note {
@@ -84,15 +86,56 @@ interface Subject {
   color: string;
 }
 
+// Beautiful note colors with good contrast
 const colorOptions = [
-  { name: 'أبيض', value: '#ffffff' },
-  { name: 'أحمر', value: '#fee2e2' },
-  { name: 'أخضر', value: '#dcfce7' },
-  { name: 'أزرق', value: '#dbeafe' },
-  { name: 'أصفر', value: '#fef9c3' },
-  { name: 'بنفسجي', value: '#f3e8ff' },
-  { name: 'وردي', value: '#fce7f3' },
+  { name: 'أبيض', value: '#ffffff', textColor: '#1e293b' },
+  { name: 'أحمر فاتح', value: '#fef2f2', textColor: '#991b1b' },
+  { name: 'برتقالي فاتح', value: '#fff7ed', textColor: '#9a3412' },
+  { name: 'أصفر فاتح', value: '#fefce8', textColor: '#854d0e' },
+  { name: 'أخضر فاتح', value: '#f0fdf4', textColor: '#166534' },
+  { name: 'سماوي فاتح', value: '#ecfeff', textColor: '#0e7490' },
+  { name: 'أزرق فاتح', value: '#eff6ff', textColor: '#1e40af' },
+  { name: 'بنفسجي فاتح', value: '#faf5ff', textColor: '#7e22ce' },
+  { name: 'وردي فاتح', value: '#fdf2f8', textColor: '#be185d' },
 ];
+
+// Get text color based on background
+function getTextColor(bgColor: string): string {
+  const color = colorOptions.find(c => c.value === bgColor);
+  if (color) return color.textColor;
+  
+  // Calculate contrast for custom colors
+  const hex = bgColor.replace('#', '');
+  const r = parseInt(hex.substr(0, 2), 16);
+  const g = parseInt(hex.substr(2, 2), 16);
+  const b = parseInt(hex.substr(4, 2), 16);
+  const brightness = (r * 299 + g * 587 + b * 114) / 1000;
+  return brightness > 155 ? '#1e293b' : '#f8fafc';
+}
+
+// Custom scrollbar styles
+const scrollbarStyles = `
+  .custom-scrollbar::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  .custom-scrollbar::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  .custom-scrollbar::-webkit-scrollbar-thumb {
+    background: #cbd5e1;
+    border-radius: 3px;
+  }
+  .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+    background: #94a3b8;
+  }
+  .dark .custom-scrollbar::-webkit-scrollbar-thumb {
+    background: #475569;
+  }
+  .dark .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+    background: #64748b;
+  }
+`;
 
 export function NotesTab() {
   const { user } = useAuth();
@@ -110,31 +153,32 @@ export function NotesTab() {
   const [viewerOpen, setViewerOpen] = useState(false);
   const [viewingNote, setViewingNote] = useState<Note | null>(null);
   const [fontSize, setFontSize] = useState(18);
-  const [textAlign, setTextAlign] = useState<'right' | 'center' | 'justify'>('right');
+  const [textAlign, setTextAlign] = useState<'right' | 'center' | 'left' | 'justify'>('right');
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [bookmarkedNotes, setBookmarkedNotes] = useState<Set<string>>(new Set());
-  // Detect mobile - use useMemo to prevent re-renders
+  
+  // Expanded subjects for folder view
+  const [expandedSubjects, setExpandedSubjects] = useState<Set<string>>(new Set());
+
   const isMobile = useMemo(() => {
     if (typeof window === 'undefined') return false;
     return window.innerWidth < 640;
   }, []);
+
   const [formTitle, setFormTitle] = useState('');
   const [formContent, setFormContent] = useState('');
   const [formSubject, setFormSubject] = useState('');
   const [formColor, setFormColor] = useState('#ffffff');
 
-  // New subject state
   const [newSubjectName, setNewSubjectName] = useState('');
   const [newSubjectColor, setNewSubjectColor] = useState('#6366f1');
   const [addingSubject, setAddingSubject] = useState(false);
 
-  // Permission check - only admins, leaders, and moderators can add/edit/delete notes
   const canManageNotes = user?.currentTeam?.role === 'ADMIN' || 
                          user?.currentTeam?.role === 'LEADER' || 
                          user?.currentTeam?.role === 'MODERATOR';
 
-  // Fetch notes
   const fetchNotes = useCallback(async () => {
     try {
       const res = await fetch('/api/notes');
@@ -149,14 +193,12 @@ export function NotesTab() {
     }
   }, []);
 
-  // Fetch subjects
   const fetchSubjects = useCallback(async () => {
     try {
       const res = await fetch('/api/subjects');
       const data = await res.json();
       if (res.ok) {
         setSubjects(data.subjects || []);
-        // Set default subject if available
         if (data.subjects?.length > 0 && !formSubject) {
           setFormSubject(data.subjects[0].name);
         }
@@ -171,12 +213,10 @@ export function NotesTab() {
     fetchSubjects();
   }, [fetchNotes, fetchSubjects]);
 
-  // Get unique subjects from notes as fallback
   const notesSubjects = useMemo(() => {
     return [...new Set(notes.map((n) => n.subject))];
   }, [notes]);
 
-  // Combine DB subjects with notes subjects
   const allSubjects = useMemo(() => {
     const dbNames = subjects.map(s => s.name);
     const fromNotes = notesSubjects.filter(s => !dbNames.includes(s));
@@ -185,6 +225,18 @@ export function NotesTab() {
       ...fromNotes.map(name => ({ id: name, name, color: '#6366f1' }))
     ];
   }, [subjects, notesSubjects]);
+
+  // Group notes by subject
+  const notesBySubject = useMemo(() => {
+    const grouped: Record<string, Note[]> = {};
+    sortedNotes.forEach(note => {
+      if (!grouped[note.subject]) {
+        grouped[note.subject] = [];
+      }
+      grouped[note.subject].push(note);
+    });
+    return grouped;
+  }, [notes, searchQuery]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -340,7 +392,6 @@ export function NotesTab() {
     }
   };
 
-  // Text-to-Speech
   const speakText = () => {
     if (!viewingNote) return;
     
@@ -370,7 +421,6 @@ export function NotesTab() {
     }
   };
 
-  // Font size controls
   const increaseFontSize = () => {
     if (fontSize < 32) setFontSize(prev => prev + 2);
   };
@@ -379,7 +429,6 @@ export function NotesTab() {
     if (fontSize > 12) setFontSize(prev => prev - 2);
   };
 
-  // Navigation between notes
   const navigateNote = (direction: 'prev' | 'next') => {
     if (!viewingNote) return;
     
@@ -394,7 +443,6 @@ export function NotesTab() {
     }
   };
 
-  // Toggle bookmark
   const toggleBookmark = (noteId: string) => {
     setBookmarkedNotes(prev => {
       const newSet = new Set(prev);
@@ -409,7 +457,6 @@ export function NotesTab() {
     });
   };
 
-  // Print note
   const printNote = () => {
     if (!viewingNote) return;
     
@@ -441,7 +488,6 @@ export function NotesTab() {
     }
   };
 
-  // Share note
   const shareNote = async () => {
     if (!viewingNote) return;
     
@@ -470,7 +516,6 @@ export function NotesTab() {
     });
   }, [notes, searchQuery, selectedSubject]);
 
-  // Sort notes: pinned first, then by date
   const sortedNotes = useMemo(() => {
     return [...filteredNotes].sort((a, b) => {
       if (a.isPinned && !b.isPinned) return -1;
@@ -478,6 +523,18 @@ export function NotesTab() {
       return new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime();
     });
   }, [filteredNotes]);
+
+  const toggleSubjectExpand = (subjectName: string) => {
+    setExpandedSubjects(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(subjectName)) {
+        newSet.delete(subjectName);
+      } else {
+        newSet.add(subjectName);
+      }
+      return newSet;
+    });
+  };
 
   if (loading) {
     return (
@@ -489,11 +546,14 @@ export function NotesTab() {
 
   return (
     <div className="space-y-6">
+      {/* Custom Scrollbar Styles */}
+      <style>{scrollbarStyles}</style>
+
       {/* Header */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div>
-          <h3 className="text-lg font-semibold text-slate-900 dark:text-white">النوتس</h3>
-          <p className="text-sm text-slate-500 dark:text-slate-400">ملاحظات الفريق - يضيفها الأدمن والليدر والمودريتور</p>
+          <h3 className="text-xl font-bold text-slate-900 dark:text-white">النوتس</h3>
+          <p className="text-sm text-slate-500">ملاحظات الفريق منظمة حسب المواد</p>
         </div>
         <div className="flex gap-2">
           {canManageNotes && (
@@ -501,14 +561,13 @@ export function NotesTab() {
               variant="outline"
               size="sm"
               onClick={() => setSubjectsDialogOpen(true)}
-              className="border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300"
+              className="border-slate-200 dark:border-slate-700"
             >
               <Settings className="w-4 h-4 ml-1" />
               المواد
             </Button>
           )}
           
-          {/* Desktop Dialog - Only for admins, leaders, moderators */}
           {!isMobile && canManageNotes && (
             <Dialog open={dialogOpen} onOpenChange={(open) => { 
               setDialogOpen(open); 
@@ -520,90 +579,74 @@ export function NotesTab() {
                   إضافة ملاحظة
                 </Button>
               </DialogTrigger>
-            <DialogContent className="bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700 max-w-lg">
-              <DialogHeader>
-                <DialogTitle className="text-slate-900 dark:text-white">
-                  {editingNote ? 'تعديل الملاحظة' : 'إضافة ملاحظة جديدة'}
-                </DialogTitle>
-                <DialogDescription className="text-slate-500 dark:text-slate-400">
-                  أدخل بيانات الملاحظة
-                </DialogDescription>
-              </DialogHeader>
-              
-              <form onSubmit={handleSubmit} className="space-y-4">
-                <div className="space-y-2">
-                  <Label className="text-slate-700 dark:text-slate-300">العنوان</Label>
-                  <Input
-                    value={formTitle}
-                    onChange={(e) => setFormTitle(e.target.value)}
-                    placeholder="عنوان الملاحظة"
-                    className="bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white"
-                    autoFocus
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label className="text-slate-700 dark:text-slate-300">المحتوى</Label>
-                  <Textarea
-                    value={formContent}
-                    onChange={(e) => setFormContent(e.target.value)}
-                    placeholder="اكتب ملاحظتك هنا..."
-                    className="bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white min-h-[150px]"
-                  />
-                </div>
-                <div className="grid grid-cols-2 gap-4">
+              <DialogContent className="max-w-lg">
+                <DialogHeader>
+                  <DialogTitle>{editingNote ? 'تعديل الملاحظة' : 'إضافة ملاحظة جديدة'}</DialogTitle>
+                  <DialogDescription>أدخل بيانات الملاحظة</DialogDescription>
+                </DialogHeader>
+                
+                <form onSubmit={handleSubmit} className="space-y-4">
                   <div className="space-y-2">
-                    <Label className="text-slate-700 dark:text-slate-300">المادة</Label>
-                    <Select value={formSubject} onValueChange={setFormSubject}>
-                      <SelectTrigger className="bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white">
-                        <SelectValue placeholder="اختر المادة" />
-                      </SelectTrigger>
-                      <SelectContent className="bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700">
-                        {allSubjects.map((s) => (
-                          <SelectItem key={s.id} value={s.name}>
-                            {s.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                    <Label>العنوان</Label>
+                    <Input
+                      value={formTitle}
+                      onChange={(e) => setFormTitle(e.target.value)}
+                      placeholder="عنوان الملاحظة"
+                      autoFocus
+                    />
                   </div>
                   <div className="space-y-2">
-                    <Label className="text-slate-700 dark:text-slate-300">اللون</Label>
-                    <Select value={formColor} onValueChange={setFormColor}>
-                      <SelectTrigger className="bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent className="bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700">
+                    <Label>المحتوى</Label>
+                    <Textarea
+                      value={formContent}
+                      onChange={(e) => setFormContent(e.target.value)}
+                      placeholder="اكتب ملاحظتك هنا..."
+                      className="min-h-[150px]"
+                    />
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label>المادة</Label>
+                      <Select value={formSubject} onValueChange={setFormSubject}>
+                        <SelectTrigger>
+                          <SelectValue placeholder="اختر المادة" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {allSubjects.map((s) => (
+                            <SelectItem key={s.id} value={s.name}>{s.name}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-2">
+                      <Label>اللون</Label>
+                      <div className="flex flex-wrap gap-2 p-2 border rounded-lg">
                         {colorOptions.map((c) => (
-                          <SelectItem key={c.value} value={c.value}>
-                            <div className="flex items-center gap-2">
-                              <div
-                                className="w-4 h-4 rounded border border-slate-300 dark:border-slate-600"
-                                style={{ backgroundColor: c.value }}
-                              />
-                              {c.name}
-                            </div>
-                          </SelectItem>
+                          <button
+                            key={c.value}
+                            type="button"
+                            onClick={() => setFormColor(c.value)}
+                            className={`w-6 h-6 rounded-full border-2 transition-all ${
+                              formColor === c.value ? 'border-slate-900 scale-110' : 'border-slate-300'
+                            }`}
+                            style={{ backgroundColor: c.value }}
+                            title={c.name}
+                          />
                         ))}
-                      </SelectContent>
-                    </Select>
+                      </div>
+                    </div>
                   </div>
-                </div>
-              </form>
-              
-              <DialogFooter>
-                <Button
-                  onClick={handleSubmit}
-                  className="bg-emerald-600 hover:bg-emerald-700"
-                  disabled={submitting}
-                >
-                  {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : 'حفظ'}
-                </Button>
-              </DialogFooter>
-            </DialogContent>
+                </form>
+                
+                <DialogFooter>
+                  <Button onClick={handleSubmit} disabled={submitting} className="bg-emerald-600 hover:bg-emerald-700">
+                    {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : 'حفظ'}
+                  </Button>
+                </DialogFooter>
+              </DialogContent>
             </Dialog>
           )}
 
-          {/* Mobile Drawer - Only for admins, leaders, moderators */}
           {isMobile && canManageNotes && (
             <Drawer open={dialogOpen} onOpenChange={(open) => { 
               setDialogOpen(open); 
@@ -615,222 +658,222 @@ export function NotesTab() {
                   إضافة
                 </Button>
               </DrawerTrigger>
-            <DrawerContent className="bg-white dark:bg-slate-900 border-t-slate-200 dark:border-t-slate-700">
-              <DrawerHeader>
-                <DrawerTitle className="text-slate-900 dark:text-white">
-                  {editingNote ? 'تعديل الملاحظة' : 'إضافة ملاحظة جديدة'}
-                </DrawerTitle>
-                <DrawerDescription className="text-slate-500 dark:text-slate-400">
-                  أدخل بيانات الملاحظة
-                </DrawerDescription>
-              </DrawerHeader>
-              <div className="px-4 overflow-y-auto max-h-[60vh]">
-                <form onSubmit={handleSubmit} className="space-y-4">
-                  <div className="space-y-2">
-                    <Label className="text-slate-700 dark:text-slate-300">العنوان</Label>
-                    <Input
-                      value={formTitle}
-                      onChange={(e) => setFormTitle(e.target.value)}
-                      placeholder="عنوان الملاحظة"
-                      className="bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label className="text-slate-700 dark:text-slate-300">المحتوى</Label>
-                    <Textarea
-                      value={formContent}
-                      onChange={(e) => setFormContent(e.target.value)}
-                      placeholder="اكتب ملاحظتك هنا..."
-                      className="bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white min-h-[150px]"
-                    />
-                  </div>
-                  <div className="grid grid-cols-2 gap-4">
+              <DrawerContent>
+                <DrawerHeader>
+                  <DrawerTitle>{editingNote ? 'تعديل الملاحظة' : 'إضافة ملاحظة جديدة'}</DrawerTitle>
+                </DrawerHeader>
+                <div className="px-4 overflow-y-auto max-h-[60vh] custom-scrollbar">
+                  <form onSubmit={handleSubmit} className="space-y-4">
                     <div className="space-y-2">
-                      <Label className="text-slate-700 dark:text-slate-300">المادة</Label>
-                      <Select value={formSubject} onValueChange={setFormSubject}>
-                        <SelectTrigger className="bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white">
-                          <SelectValue placeholder="اختر المادة" />
-                        </SelectTrigger>
-                        <SelectContent className="bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700">
-                          {allSubjects.map((s) => (
-                            <SelectItem key={s.id} value={s.name}>
-                              {s.name}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                      <Label>العنوان</Label>
+                      <Input
+                        value={formTitle}
+                        onChange={(e) => setFormTitle(e.target.value)}
+                        placeholder="عنوان الملاحظة"
+                      />
                     </div>
                     <div className="space-y-2">
-                      <Label className="text-slate-700 dark:text-slate-300">اللون</Label>
-                      <Select value={formColor} onValueChange={setFormColor}>
-                        <SelectTrigger className="bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent className="bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700">
-                          {colorOptions.map((c) => (
-                            <SelectItem key={c.value} value={c.value}>
-                              <div className="flex items-center gap-2">
-                                <div
-                                  className="w-4 h-4 rounded border border-slate-300 dark:border-slate-600"
-                                  style={{ backgroundColor: c.value }}
-                                />
-                                {c.name}
-                              </div>
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                      <Label>المحتوى</Label>
+                      <Textarea
+                        value={formContent}
+                        onChange={(e) => setFormContent(e.target.value)}
+                        placeholder="اكتب ملاحظتك هنا..."
+                        className="min-h-[150px]"
+                      />
                     </div>
-                  </div>
-                </form>
-              </div>
-              <DrawerFooter>
-                <Button
-                  onClick={handleSubmit}
-                  className="bg-emerald-600 hover:bg-emerald-700"
-                  disabled={submitting}
-                >
-                  {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : 'حفظ'}
-                </Button>
-              </DrawerFooter>
-            </DrawerContent>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label>المادة</Label>
+                        <Select value={formSubject} onValueChange={setFormSubject}>
+                          <SelectTrigger>
+                            <SelectValue placeholder="اختر المادة" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {allSubjects.map((s) => (
+                              <SelectItem key={s.id} value={s.name}>{s.name}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="space-y-2">
+                        <Label>اللون</Label>
+                        <div className="flex flex-wrap gap-1 p-2 border rounded-lg">
+                          {colorOptions.slice(0, 6).map((c) => (
+                            <button
+                              key={c.value}
+                              type="button"
+                              onClick={() => setFormColor(c.value)}
+                              className={`w-5 h-5 rounded-full border-2 ${
+                                formColor === c.value ? 'border-slate-900 scale-110' : 'border-slate-300'
+                              }`}
+                              style={{ backgroundColor: c.value }}
+                            />
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  </form>
+                </div>
+                <DrawerFooter>
+                  <Button onClick={handleSubmit} disabled={submitting} className="bg-emerald-600 hover:bg-emerald-700">
+                    {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : 'حفظ'}
+                  </Button>
+                </DrawerFooter>
+              </DrawerContent>
             </Drawer>
           )}
         </div>
       </div>
 
-      {/* Search and Filter */}
-      <div className="flex flex-col sm:flex-row gap-4">
-        <div className="relative flex-1">
-          <Search className="absolute right-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-slate-400" />
-          <Input
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="ابحث في الملاحظات..."
-            className="bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white pr-10"
-          />
-        </div>
-        <Select value={selectedSubject} onValueChange={setSelectedSubject}>
-          <SelectTrigger className="w-full sm:w-48 bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white">
-            <FolderOpen className="w-4 h-4 ml-2" />
-            <SelectValue placeholder="كل المواد" />
-          </SelectTrigger>
-          <SelectContent className="bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700">
-            <SelectItem value="all">كل المواد</SelectItem>
-            {allSubjects.map((s) => (
-              <SelectItem key={s.id} value={s.name}>
-                {s.name}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+      {/* Search */}
+      <div className="relative">
+        <Search className="absolute right-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-slate-400" />
+        <Input
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          placeholder="ابحث في الملاحظات..."
+          className="pr-10"
+        />
       </div>
 
-      {/* Notes Grid */}
-      <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-        {sortedNotes.map((note) => (
-          <Card
-            key={note.id}
-            className="border-slate-200 dark:border-slate-700 hover:border-emerald-300 dark:hover:border-emerald-700 transition-all relative group cursor-pointer"
-            style={{ backgroundColor: note.color }}
-            onClick={() => openNoteViewer(note)}
-          >
-            {note.isPinned && (
-              <Pin className="absolute top-2 left-2 w-4 h-4 text-red-500 rotate-45" />
-            )}
-            {bookmarkedNotes.has(note.id) && (
-              <Bookmark className="absolute top-2 right-2 w-4 h-4 text-amber-500 fill-amber-500" />
-            )}
-            <CardHeader className="pb-2">
-              <div className="flex items-start justify-between gap-2">
-                <CardTitle className="text-slate-900 text-sm font-semibold line-clamp-1 flex-1">
-                  {note.title}
-                </CardTitle>
-              </div>
-              <Badge variant="secondary" className="w-fit text-xs mt-1 bg-slate-100 dark:bg-slate-700">
-                {note.subject}
-              </Badge>
-            </CardHeader>
-            <CardContent>
-              <p className="text-sm text-slate-700 dark:text-slate-300 line-clamp-3 whitespace-pre-wrap">
-                {note.content}
-              </p>
-              <div className="flex items-center justify-between mt-3">
-                <p className="text-xs text-slate-500">
-                  {new Date(note.updatedAt).toLocaleDateString('ar-EG')}
-                </p>
-                {note.author && (
-                  <p className="text-xs text-slate-400">
-                    بواسطة: {note.author.name || 'مستخدم'}
-                  </p>
-                )}
-              </div>
-              
-              {/* Action buttons - Only for admins, leaders, moderators */}
-              {canManageNotes && (
-                <div className={`flex gap-1 bg-white/90 dark:bg-slate-800/90 rounded-lg p-1 shadow-sm ${
-                  isMobile ? 'mt-2 justify-end' : 'absolute bottom-2 left-2 opacity-0 group-hover:opacity-100 transition-opacity'
-                }`}>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-7 w-7 hover:bg-slate-100 dark:hover:bg-slate-700"
-                  onClick={(e) => { e.stopPropagation(); handlePin(note.id, note.isPinned); }}
-                >
-                  {note.isPinned ? (
-                    <PinOff className="w-3 h-3 text-slate-600" />
-                  ) : (
-                    <Pin className="w-3 h-3 text-slate-600" />
+      {/* Notes organized by Subject (Folder style) */}
+      <div className="space-y-4">
+        {Object.entries(notesBySubject).map(([subjectName, subjectNotes]) => {
+          const isExpanded = expandedSubjects.has(subjectName) || searchQuery.length > 0;
+          const subjectInfo = allSubjects.find(s => s.name === subjectName);
+          const pinnedCount = subjectNotes.filter(n => n.isPinned).length;
+          
+          return (
+            <div key={subjectName} className="bg-white dark:bg-slate-800/50 rounded-xl border border-slate-200 dark:border-slate-700 overflow-hidden">
+              {/* Subject Header */}
+              <button
+                onClick={() => toggleSubjectExpand(subjectName)}
+                className="w-full flex items-center justify-between p-4 hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-colors"
+              >
+                <div className="flex items-center gap-3">
+                  <div
+                    className="w-4 h-4 rounded-full"
+                    style={{ backgroundColor: subjectInfo?.color || '#6366f1' }}
+                  />
+                  <span className="font-medium text-slate-900 dark:text-white">{subjectName}</span>
+                  <Badge variant="secondary" className="text-xs">
+                    {subjectNotes.length} نوتة
+                  </Badge>
+                  {pinnedCount > 0 && (
+                    <Badge className="bg-amber-100 text-amber-700 text-xs">
+                      <Pin className="w-3 h-3 ml-1" />
+                      {pinnedCount}
+                    </Badge>
                   )}
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-7 w-7 hover:bg-slate-100 dark:hover:bg-slate-700"
-                  onClick={(e) => { e.stopPropagation(); openEditDialog(note); }}
-                >
-                  <Edit className="w-3 h-3 text-slate-600" />
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-7 w-7 hover:bg-red-50 dark:hover:bg-red-900/20"
-                  onClick={(e) => { e.stopPropagation(); handleDelete(note.id); }}
-                >
-                  <Trash2 className="w-3 h-3 text-red-500" />
-                </Button>
+                </div>
+                {isExpanded ? (
+                  <ChevronUp className="w-5 h-5 text-slate-400" />
+                ) : (
+                  <ChevronDown className="w-5 h-5 text-slate-400" />
+                )}
+              </button>
+              
+              {/* Notes Grid */}
+              {isExpanded && (
+                <div className="p-4 pt-0 grid gap-3 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+                  {subjectNotes.map((note) => (
+                    <Card
+                      key={note.id}
+                      className="border-2 hover:shadow-lg transition-all relative group cursor-pointer overflow-hidden"
+                      style={{ 
+                        backgroundColor: note.color,
+                        borderColor: note.isPinned ? '#f59e0b' : 'transparent'
+                      }}
+                      onClick={() => openNoteViewer(note)}
+                    >
+                      {/* Pin indicator */}
+                      {note.isPinned && (
+                        <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-amber-400 to-amber-500" />
+                      )}
+                      
+                      <div className="p-4">
+                        {/* Title with proper color */}
+                        <h4 
+                          className="font-semibold text-sm line-clamp-1 mb-2"
+                          style={{ color: getTextColor(note.color) }}
+                        >
+                          {note.isPinned && <Pin className="w-3 h-3 inline ml-1 text-amber-500" />}
+                          {note.title}
+                        </h4>
+                        
+                        {/* Content preview with proper color */}
+                        <p 
+                          className="text-xs line-clamp-3 whitespace-pre-wrap mb-3 opacity-80"
+                          style={{ color: getTextColor(note.color) }}
+                        >
+                          {note.content}
+                        </p>
+                        
+                        {/* Date */}
+                        <p className="text-xs opacity-60" style={{ color: getTextColor(note.color) }}>
+                          {new Date(note.updatedAt).toLocaleDateString('ar-EG')}
+                        </p>
+                        
+                        {/* Action buttons */}
+                        {canManageNotes && (
+                          <div className={`flex gap-1 mt-2 pt-2 border-t border-black/10 ${isMobile ? '' : 'opacity-0 group-hover:opacity-100'} transition-opacity`}>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-7 w-7"
+                              onClick={(e) => { e.stopPropagation(); handlePin(note.id, note.isPinned); }}
+                            >
+                              {note.isPinned ? <PinOff className="w-3 h-3" /> : <Pin className="w-3 h-3" />}
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-7 w-7"
+                              onClick={(e) => { e.stopPropagation(); openEditDialog(note); }}
+                            >
+                              <Edit className="w-3 h-3" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-7 w-7 text-red-500 hover:text-red-600"
+                              onClick={(e) => { e.stopPropagation(); handleDelete(note.id); }}
+                            >
+                              <Trash2 className="w-3 h-3" />
+                            </Button>
+                          </div>
+                        )}
+                      </div>
+                    </Card>
+                  ))}
                 </div>
               )}
-            </CardContent>
-          </Card>
-        ))}
+            </div>
+          );
+        })}
       </div>
 
       {sortedNotes.length === 0 && (
         <div className="text-center py-12">
-          <FileText className="w-12 h-12 text-slate-300 dark:text-slate-600 mx-auto mb-4" />
-          <p className="text-slate-500 dark:text-slate-400">لا توجد ملاحظات</p>
+          <FileText className="w-12 h-12 text-slate-300 mx-auto mb-4" />
+          <p className="text-slate-500">لا توجد ملاحظات</p>
         </div>
       )}
 
       {/* Subjects Management Dialog */}
       <Dialog open={subjectsDialogOpen} onOpenChange={setSubjectsDialogOpen}>
-        <DialogContent className="bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700 max-w-md">
+        <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle className="text-slate-900 dark:text-white">إدارة المواد</DialogTitle>
-            <DialogDescription className="text-slate-500 dark:text-slate-400">
-              إضافة وحذف المواد الدراسية
-            </DialogDescription>
+            <DialogTitle>إدارة المواد</DialogTitle>
+            <DialogDescription>إضافة وحذف المواد الدراسية</DialogDescription>
           </DialogHeader>
           
           <div className="space-y-4">
-            {/* Add new subject */}
             <div className="flex gap-2">
               <Input
                 value={newSubjectName}
                 onChange={(e) => setNewSubjectName(e.target.value)}
                 placeholder="اسم المادة الجديدة"
-                className="bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white flex-1"
                 onKeyDown={(e) => e.key === 'Enter' && handleAddSubject()}
               />
               <div className="flex gap-1">
@@ -839,51 +882,33 @@ export function NotesTab() {
                     key={color}
                     type="button"
                     onClick={() => setNewSubjectColor(color)}
-                    className={`w-6 h-6 rounded-full border-2 transition-all ${
-                      newSubjectColor === color ? 'border-slate-900 dark:border-white scale-110' : 'border-transparent'
+                    className={`w-6 h-6 rounded-full border-2 ${
+                      newSubjectColor === color ? 'border-slate-900 scale-110' : 'border-transparent'
                     }`}
                     style={{ backgroundColor: color }}
                   />
                 ))}
               </div>
-              <Button
-                onClick={handleAddSubject}
-                className="bg-emerald-600 hover:bg-emerald-700 shrink-0"
-                disabled={addingSubject}
-              >
+              <Button onClick={handleAddSubject} disabled={addingSubject} className="bg-emerald-600 shrink-0">
                 {addingSubject ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
               </Button>
             </div>
 
-            {/* Subjects list */}
-            <div className="space-y-2 max-h-60 overflow-y-auto">
+            <div className="space-y-2 max-h-60 overflow-y-auto custom-scrollbar">
               {subjects.map((subject) => (
-                <div
-                  key={subject.id}
-                  className="flex items-center justify-between p-3 bg-slate-50 dark:bg-slate-800 rounded-lg"
-                >
+                <div key={subject.id} className="flex items-center justify-between p-3 bg-slate-50 dark:bg-slate-800 rounded-lg">
                   <div className="flex items-center gap-3">
-                    <div
-                      className="w-4 h-4 rounded-full"
-                      style={{ backgroundColor: subject.color }}
-                    />
-                    <span className="text-slate-900 dark:text-white">{subject.name}</span>
+                    <div className="w-4 h-4 rounded-full" style={{ backgroundColor: subject.color }} />
+                    <span>{subject.name}</span>
                   </div>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-8 w-8 text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20"
-                    onClick={() => handleDeleteSubject(subject.id)}
-                  >
+                  <Button variant="ghost" size="icon" className="text-red-500" onClick={() => handleDeleteSubject(subject.id)}>
                     <Trash2 className="w-4 h-4" />
                   </Button>
                 </div>
               ))}
               
               {subjects.length === 0 && (
-                <p className="text-center text-slate-500 dark:text-slate-400 py-4">
-                  لا توجد مواد، أضف مادة جديدة
-                </p>
+                <p className="text-center text-slate-500 py-4">لا توجد مواد، أضف مادة جديدة</p>
               )}
             </div>
           </div>
@@ -893,214 +918,139 @@ export function NotesTab() {
       {/* Note Viewer Modal */}
       {viewerOpen && viewingNote && (
         <div 
-          className={`fixed inset-0 z-50 bg-white dark:bg-slate-900 ${isFullscreen ? '' : 'md:m-4 md:rounded-2xl md:border md:border-slate-200 dark:md:border-slate-700 md:shadow-2xl'}`}
+          className={`fixed inset-0 z-50 bg-white dark:bg-slate-900 ${isFullscreen ? '' : 'md:m-4 md:rounded-2xl md:border md:shadow-2xl'}`}
           onClick={(e) => e.target === e.currentTarget && closeNoteViewer()}
         >
           <div className="h-full flex flex-col">
-            {/* Viewer Header */}
+            {/* Header */}
             <div className="bg-gradient-to-l from-emerald-500 to-teal-600 text-white px-4 py-3 shrink-0">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    onClick={closeNoteViewer}
-                    className="text-white hover:bg-white/20 rounded-xl"
-                  >
+                  <Button variant="ghost" size="icon" onClick={closeNoteViewer} className="text-white hover:bg-white/20">
                     <X className="w-5 h-5" />
                   </Button>
                   <div>
                     <h2 className="font-bold text-lg truncate max-w-[200px] md:max-w-md">{viewingNote.title}</h2>
                     <div className="flex items-center gap-2 text-emerald-100 text-xs">
-                      <Badge className="bg-white/20 text-white text-xs">{viewingNote.subject}</Badge>
+                      <Badge className="bg-white/20 text-white">{viewingNote.subject}</Badge>
                       <span>{new Date(viewingNote.updatedAt).toLocaleDateString('ar-EG')}</span>
                     </div>
                   </div>
                 </div>
                 
                 <div className="flex items-center gap-1">
-                  {/* Navigation */}
                   <div className="hidden md:flex items-center gap-1 mx-2">
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => navigateNote('next')}
-                      disabled={sortedNotes.findIndex(n => n.id === viewingNote.id) === 0}
-                      className="text-white hover:bg-white/20 rounded-xl disabled:opacity-50"
-                    >
+                    <Button variant="ghost" size="icon" onClick={() => navigateNote('next')} className="text-white hover:bg-white/20">
                       <ChevronRight className="w-5 h-5" />
                     </Button>
-                    <span className="text-sm text-emerald-100 mx-2">
+                    <span className="text-sm mx-2">
                       {sortedNotes.findIndex(n => n.id === viewingNote.id) + 1} / {sortedNotes.length}
                     </span>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => navigateNote('prev')}
-                      disabled={sortedNotes.findIndex(n => n.id === viewingNote.id) === sortedNotes.length - 1}
-                      className="text-white hover:bg-white/20 rounded-xl disabled:opacity-50"
-                    >
+                    <Button variant="ghost" size="icon" onClick={() => navigateNote('prev')} className="text-white hover:bg-white/20">
                       <ChevronLeft className="w-5 h-5" />
                     </Button>
                   </div>
                   
-                  <div className="w-px h-6 bg-white/20 mx-2 hidden md:block" />
-                  
-                  {/* Actions */}
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    onClick={() => toggleBookmark(viewingNote.id)}
-                    className="text-white hover:bg-white/20 rounded-xl"
-                  >
+                  <Button variant="ghost" size="icon" onClick={() => toggleBookmark(viewingNote.id)} className="text-white hover:bg-white/20">
                     <Bookmark className={`w-5 h-5 ${bookmarkedNotes.has(viewingNote.id) ? 'fill-amber-400 text-amber-400' : ''}`} />
                   </Button>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    onClick={shareNote}
-                    className="text-white hover:bg-white/20 rounded-xl"
-                  >
+                  <Button variant="ghost" size="icon" onClick={shareNote} className="text-white hover:bg-white/20">
                     <Share2 className="w-5 h-5" />
                   </Button>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    onClick={printNote}
-                    className="text-white hover:bg-white/20 rounded-xl hidden md:flex"
-                  >
+                  <Button variant="ghost" size="icon" onClick={printNote} className="text-white hover:bg-white/20 hidden md:flex">
                     <Printer className="w-5 h-5" />
                   </Button>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    onClick={() => setIsFullscreen(!isFullscreen)}
-                    className="text-white hover:bg-white/20 rounded-xl hidden md:flex"
-                  >
+                  <Button variant="ghost" size="icon" onClick={() => setIsFullscreen(!isFullscreen)} className="text-white hover:bg-white/20 hidden md:flex">
                     {isFullscreen ? <Minimize2 className="w-5 h-5" /> : <Maximize2 className="w-5 h-5" />}
                   </Button>
                 </div>
               </div>
             </div>
 
-            {/* Educational Tools Bar */}
-            <div className="bg-slate-50 dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700 px-4 py-2 shrink-0">
+            {/* Tools Bar */}
+            <div className="bg-slate-50 dark:bg-slate-800 border-b px-4 py-2 shrink-0">
               <div className="flex items-center justify-between gap-4 flex-wrap">
                 {/* Text-to-Speech */}
-                <div className="flex items-center gap-2">
-                  <Button
-                    variant={isSpeaking ? "default" : "outline"}
-                    size="sm"
-                    onClick={speakText}
-                    className={`rounded-xl ${isSpeaking ? 'bg-emerald-600 hover:bg-emerald-700' : 'border-slate-200 dark:border-slate-700'}`}
-                  >
-                    {isSpeaking ? <VolumeX className="w-4 h-4 ml-1" /> : <Volume2 className="w-4 h-4 ml-1" />}
-                    {isSpeaking ? 'إيقاف' : 'استمع'}
-                  </Button>
-                </div>
+                <Button
+                  variant={isSpeaking ? "default" : "outline"}
+                  size="sm"
+                  onClick={speakText}
+                  className={isSpeaking ? 'bg-emerald-600 hover:bg-emerald-700' : ''}
+                >
+                  {isSpeaking ? <VolumeX className="w-4 h-4 ml-1" /> : <Volume2 className="w-4 h-4 ml-1" />}
+                  {isSpeaking ? 'إيقاف' : 'استمع'}
+                </Button>
                 
                 {/* Font Size */}
                 <div className="flex items-center gap-2">
-                  <span className="text-xs text-slate-500 dark:text-slate-400">الحجم:</span>
-                  <Button
-                    variant="outline"
-                    size="icon"
-                    onClick={decreaseFontSize}
-                    className="h-8 w-8 rounded-lg border-slate-200 dark:border-slate-700"
-                  >
+                  <span className="text-xs text-slate-500">الحجم:</span>
+                  <Button variant="outline" size="icon" onClick={decreaseFontSize} className="h-8 w-8">
                     <ZoomOut className="w-4 h-4" />
                   </Button>
-                  <span className="text-sm font-medium text-slate-700 dark:text-slate-300 w-8 text-center">{fontSize}</span>
-                  <Button
-                    variant="outline"
-                    size="icon"
-                    onClick={increaseFontSize}
-                    className="h-8 w-8 rounded-lg border-slate-200 dark:border-slate-700"
-                  >
+                  <span className="text-sm font-medium w-8 text-center">{fontSize}</span>
+                  <Button variant="outline" size="icon" onClick={increaseFontSize} className="h-8 w-8">
                     <ZoomIn className="w-4 h-4" />
                   </Button>
                 </div>
                 
-                {/* Text Alignment */}
+                {/* Text Alignment - with Left option for English */}
                 <div className="flex items-center gap-1">
                   <Button
                     variant={textAlign === 'right' ? "default" : "outline"}
                     size="icon"
                     onClick={() => setTextAlign('right')}
-                    className={`h-8 w-8 rounded-lg ${textAlign === 'right' ? 'bg-emerald-600 hover:bg-emerald-700' : 'border-slate-200 dark:border-slate-700'}`}
+                    className={`h-8 w-8 ${textAlign === 'right' ? 'bg-emerald-600 hover:bg-emerald-700' : ''}`}
+                    title="يمين"
                   >
-                    <AlignLeft className="w-4 h-4" />
+                    <AlignRight className="w-4 h-4" />
                   </Button>
                   <Button
                     variant={textAlign === 'center' ? "default" : "outline"}
                     size="icon"
                     onClick={() => setTextAlign('center')}
-                    className={`h-8 w-8 rounded-lg ${textAlign === 'center' ? 'bg-emerald-600 hover:bg-emerald-700' : 'border-slate-200 dark:border-slate-700'}`}
+                    className={`h-8 w-8 ${textAlign === 'center' ? 'bg-emerald-600 hover:bg-emerald-700' : ''}`}
+                    title="وسط"
                   >
                     <AlignCenter className="w-4 h-4" />
+                  </Button>
+                  <Button
+                    variant={textAlign === 'left' ? "default" : "outline"}
+                    size="icon"
+                    onClick={() => setTextAlign('left')}
+                    className={`h-8 w-8 ${textAlign === 'left' ? 'bg-emerald-600 hover:bg-emerald-700' : ''}`}
+                    title="يسار (للإنجليزي)"
+                  >
+                    <AlignLeft className="w-4 h-4" />
                   </Button>
                   <Button
                     variant={textAlign === 'justify' ? "default" : "outline"}
                     size="icon"
                     onClick={() => setTextAlign('justify')}
-                    className={`h-8 w-8 rounded-lg ${textAlign === 'justify' ? 'bg-emerald-600 hover:bg-emerald-700' : 'border-slate-200 dark:border-slate-700'}`}
+                    className={`h-8 w-8 ${textAlign === 'justify' ? 'bg-emerald-600 hover:bg-emerald-700' : ''}`}
+                    title="ضبط"
                   >
                     <AlignJustify className="w-4 h-4" />
                   </Button>
                 </div>
-                
-                {/* Reading Mode Badge */}
-                <div className="flex items-center gap-2">
-                  <BookOpen className="w-4 h-4 text-emerald-500" />
-                  <span className="text-xs text-slate-500 dark:text-slate-400">وضع القراءة</span>
-                </div>
               </div>
             </div>
 
-            {/* Note Content */}
+            {/* Content */}
             <div 
-              className="flex-1 overflow-y-auto p-4 md:p-8"
+              className="flex-1 overflow-y-auto p-6 custom-scrollbar"
               style={{ backgroundColor: viewingNote.color }}
             >
-              <div 
-                className="max-w-3xl mx-auto bg-white/80 dark:bg-slate-800/80 rounded-2xl p-6 md:p-8 shadow-lg"
-                style={{
+              <div
+                className="max-w-4xl mx-auto leading-relaxed whitespace-pre-wrap"
+                style={{ 
                   fontSize: `${fontSize}px`,
                   textAlign: textAlign,
-                  lineHeight: 2,
+                  direction: textAlign === 'left' ? 'ltr' : 'rtl',
+                  color: getTextColor(viewingNote.color)
                 }}
               >
-                <div className="prose dark:prose-invert max-w-none">
-                  <p className="text-slate-800 dark:text-slate-200 whitespace-pre-wrap break-words">
-                    {viewingNote.content}
-                  </p>
-                </div>
+                {viewingNote.content}
               </div>
-            </div>
-
-            {/* Mobile Navigation */}
-            <div className="md:hidden bg-slate-50 dark:bg-slate-800 border-t border-slate-200 dark:border-slate-700 px-4 py-3 flex justify-between items-center shrink-0">
-              <Button
-                variant="outline"
-                onClick={() => navigateNote('next')}
-                disabled={sortedNotes.findIndex(n => n.id === viewingNote.id) === 0}
-                className="rounded-xl border-slate-200 dark:border-slate-700"
-              >
-                <ChevronRight className="w-5 h-5 ml-1" />
-                السابق
-              </Button>
-              <span className="text-sm text-slate-500 dark:text-slate-400">
-                {sortedNotes.findIndex(n => n.id === viewingNote.id) + 1} / {sortedNotes.length}
-              </span>
-              <Button
-                variant="outline"
-                onClick={() => navigateNote('prev')}
-                disabled={sortedNotes.findIndex(n => n.id === viewingNote.id) === sortedNotes.length - 1}
-                className="rounded-xl border-slate-200 dark:border-slate-700"
-              >
-                التالي
-                <ChevronLeft className="w-5 h-5 mr-1" />
-              </Button>
             </div>
           </div>
         </div>
